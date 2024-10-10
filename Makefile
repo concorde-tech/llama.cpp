@@ -1263,6 +1263,14 @@ llama-cli: examples/main/main.cpp \
 	@echo '====  Run ./llama-cli -h for help.  ===='
 	@echo
 
+llama-snap-vm: examples/snap-vm/main.cpp \
+	$(OBJ_ALL)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) -o $@ $(LDFLAGS)
+	@echo
+	@echo '====  Run ./llama-snap-vm -h for help.  ===='
+	@echo
+
 llama-infill: examples/infill/infill.cpp \
 	$(OBJ_ALL)
 	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
