@@ -248,8 +248,8 @@ test: $(TEST_TARGETS)
 all: $(BUILD_TARGETS) $(TEST_TARGETS) $(LEGACY_TARGETS_BUILD)
 
 ifdef RISCV_CROSS_COMPILE
-CC	:= riscv64-unknown-linux-gnu-gcc
-CXX	:= riscv64-unknown-linux-gnu-g++
+CC	:= riscv64-unknown-elf-gcc
+CXX	:= riscv64-unknown-elf-g++
 endif
 
 #
