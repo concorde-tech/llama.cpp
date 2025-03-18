@@ -1899,6 +1899,7 @@ struct llama_mmap {
     std::vector<std::pair<size_t, size_t>> mapped_fragments;
 
     llama_mmap(struct llama_file * file, size_t prefetch = (size_t) -1 /* -1 = max value */, bool numa = false) {
+        // printf("llama_mmap\n");
         size = file->size;
         int fd = fileno(file->fp);
         int flags = MAP_SHARED;
@@ -4192,6 +4193,48 @@ static std::string llama_format_tensor_shape(const struct ggml_tensor * t) {
     }
     return buf;
 }
+static void print_data_binary(const uint8_t* data, size_t n_bytes = 128) {
+
+    printf("Printing data\n");
+
+    // Print byte by byte
+    for (size_t i = 0; i < n_bytes; i++) {
+        // Print byte index at the start of each line
+        if (i % 8 == 0) {
+            printf("\n%04zx: ", i);
+        }
+
+        // Print the byte in binary
+        uint8_t byte = data[i];
+        for (int bit = 7; bit >= 0; bit--) {
+            printf("%d", (byte >> bit) & 1);
+        }
+        printf(" "); // Space between bytes
+    }
+    printf("\n");
+
+}
+static void print_tensor_data_binary(const struct ggml_tensor* tensor, size_t max_bytes = 128) {
+    if (tensor == NULL || tensor->data == NULL) {
+        printf("Tensor or tensor data is NULL\n");
+        return;
+    }
+
+    printf("Tensor: %s (type: %s)\n", tensor->name, ggml_type_name(tensor->type));
+
+    // Determine how many bytes to print
+    size_t tensor_size = ggml_nbytes(tensor);
+    size_t bytes_to_print = std::min(tensor_size, max_bytes);
+
+    printf("Printing first %zu bytes of %zu total bytes:\n", bytes_to_print, tensor_size);
+
+    // Get pointer to the data
+    const uint8_t* data = (const uint8_t*)tensor->data;
+
+    // Print byte by byte
+    print_data_binary(data, bytes_to_print);
+
+}
 
 namespace GGUFMeta {
     template <typename T, gguf_type gt_, T (*gfun)(const gguf_context *, const int)>
@@ -4413,6 +4456,7 @@ struct llama_model_loader {
         if (getenv("LLAMA_TRACE")) {
             trace = atoi(getenv("LLAMA_TRACE"));
         }
+        // printf("llama_model_loader (trace: %d)\n", trace);
 
         if (param_overrides_p != nullptr) {
             for (const struct llama_model_kv_override * p = param_overrides_p; p->key[0] != 0; p++) {
@@ -4518,6 +4562,8 @@ struct llama_model_loader {
             tensor_names.insert(name);
         }
 
+        // printf("%s: loaded meta data with %d key-value pairs and %d tensors from %s (version %s)\n",
+                // __func__, n_kv, n_tensors, fname.c_str(), llama_file_version_name(fver));
         LLAMA_LOG_INFO("%s: loaded meta data with %d key-value pairs and %d tensors from %s (version %s)\n",
                 __func__, n_kv, n_tensors, fname.c_str(), llama_file_version_name(fver));
 
@@ -4542,7 +4588,9 @@ struct llama_model_loader {
 
                 if (trace > 0) {
                     const uint16_t sid = weights.at(i).idx;
+                    // printf("%s: - tensor %4d, split %2d: %32s %-8s [ %s ]\n", __func__, i, sid, ggml_get_name(tensor), ggml_type_name(type), llama_format_tensor_shape(tensor).c_str());
                     LLAMA_LOG_INFO("%s: - tensor %4d, split %2d: %32s %-8s [ %s ]\n", __func__, i, sid, ggml_get_name(tensor), ggml_type_name(type), llama_format_tensor_shape(tensor).c_str());
+                    // print_tensor_data_binary(tensor);
                 }
             }
 
@@ -4617,6 +4665,7 @@ struct llama_model_loader {
                     continue;
                 }
 
+                // printf("%s: - type %4s: %4d tensors\n", __func__, ggml_type_name(kv.first), kv.second);
                 LLAMA_LOG_INFO("%s: - type %4s: %4d tensors\n", __func__, ggml_type_name(kv.first), kv.second);
             }
         }
@@ -5132,13 +5181,20 @@ struct llama_model_loader {
             size_t n_size = ggml_nbytes(cur);
 
             if (use_mmap) {
+                // printf("use_mmap\n");
+
+                // printf("%s: - tensor\n", ggml_get_name(cur));
+                // print_tensor_data_binary(cur);
+                // printf("-------------------------------------\n");
+
+                // printf("weight->idx: %d\n", weight->idx);
                 const auto & mapping = mappings.at(weight->idx);
                 ggml_backend_buffer_t buf_mmap = nullptr;
                 if (bufs.count(weight->idx)) {
                     buf_mmap = bufs.at(weight->idx);
                 }
                 uint8_t * data = (uint8_t *) mapping->addr + weight->offs;
-
+                // print_data_binary(data, 64);
                 if (check_tensors) {
                     validation_result.emplace_back(std::async(std::launch::async, [cur, data, n_size] {
                         return std::make_pair(cur, ggml_validate_row_data(cur->type, data, n_size));
@@ -5147,6 +5203,7 @@ struct llama_model_loader {
 
                 GGML_ASSERT(buf_mmap || cur->data); // either we have a buffer to allocate the tensor in, or it is already allocated
                 if (buf_mmap && cur->data == nullptr) {
+                    // printf("buf_mmap && cur->data == nullptr\n");
                     ggml_backend_tensor_alloc(buf_mmap, cur, data);
                     if (lmlocks) {
                         const auto & lmlock = lmlocks->at(weight->idx);
@@ -5159,7 +5216,10 @@ struct llama_model_loader {
                 } else {
                     ggml_backend_tensor_set(cur, data, 0, n_size);
                 }
+                // printf("%s: - tensor\n", ggml_get_name(cur));
+                // print_tensor_data_binary(cur);
             } else {
+                // printf("no use_mmap\n");
                 GGML_ASSERT(weight->idx < files.size());
                 const auto & file = files.at(weight->idx);
                 if (ggml_backend_buffer_is_host(cur->buffer)) {
@@ -6948,6 +7008,8 @@ static bool llm_load_tensors(
         void * progress_callback_user_data) {
     auto & hparams = model.hparams;
 
+    // printf("llm_load_tensors\n");
+
     // check if the value of main_gpu is valid
     if (llama_get_device_count(model) > 0 &&
         split_mode != LLAMA_SPLIT_MODE_LAYER &&
@@ -7118,6 +7180,9 @@ static bool llm_load_tensors(
                         model.output_norm = ml.create_tensor(ctx_output,       tn(LLM_TENSOR_OUTPUT_NORM, "weight"), {n_embd});
                         model.output      = ml.create_tensor(ctx_output_split, tn(LLM_TENSOR_OUTPUT,      "weight"), {n_embd, n_vocab}, llama_model_loader::TENSOR_NOT_REQUIRED);
 
+                        // ggml_get_name(model.output);
+                        // print_tensor_data_binary(model.output);
+
                         // if output is NULL, init from the input tok embed
                         if (model.output == NULL) {
                             model.output = ml.create_tensor(ctx_output, tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, llama_model_loader::TENSOR_DUPLICATED);
@@ -7149,13 +7214,22 @@ static bool llm_load_tensors(
 
                         if (n_expert == 0) {
                             layer.ffn_gate = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd,   n_ff});
+                            // ggml_get_name(layer.ffn_up);
+                            // print_tensor_data_binary(layer.ffn_gate);
                             layer.ffn_down = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_DOWN, "weight", i), {  n_ff, n_embd});
                             layer.ffn_up   = ml.create_tensor(ctx_split, tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd,   n_ff});
+                            // ggml_get_name(layer.ffn_up);
+                            // print_tensor_data_binary(layer.ffn_up);
 
                             // optional MLP bias
                             layer.ffn_gate_b = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_GATE, "bias", i), {n_ff}, llama_model_loader::TENSOR_NOT_REQUIRED);
+                            // ggml_get_name(layer.ffn_gate_b);
+                            // print_tensor_data_binary(layer.ffn_gate_b);
                             layer.ffn_down_b = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_DOWN, "bias", i), {n_embd}, llama_model_loader::TENSOR_NOT_REQUIRED);
                             layer.ffn_up_b   = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_UP,   "bias", i), {n_ff}, llama_model_loader::TENSOR_NOT_REQUIRED);
+
+                            // ggml_get_name(layer.ffn_up_b);
+                            // print_tensor_data_binary(layer.ffn_up_b);
                         } else {
                             layer.ffn_gate_inp = ml.create_tensor(ctx_layer, tn(LLM_TENSOR_FFN_GATE_INP, "weight", i), {n_embd, n_expert});
 
@@ -8985,6 +9059,9 @@ static bool llm_load_tensors(
     for (ggml_context * ctx : model.ctxs) {
         for (auto * cur = ggml_get_first_tensor(ctx); cur != NULL; cur = ggml_get_next_tensor(ctx, cur)) {
             model.tensors_by_name.emplace_back(ggml_get_name(cur), cur);
+
+            // printf("%s: - tensor\n", ggml_get_name(cur));
+            // print_tensor_data_binary(cur);
         }
     }
 
@@ -8996,6 +9073,13 @@ static bool llm_load_tensors(
             return false;
         }
     }
+    // populate tensors_by_name
+    // for (ggml_context * ctx : model.ctxs) {
+    //     for (auto * cur = ggml_get_first_tensor(ctx); cur != NULL; cur = ggml_get_next_tensor(ctx, cur)) {
+    //         printf("%s: - tensor\n", ggml_get_name(cur));
+    //         print_tensor_data_binary(cur);
+    //     }
+    // }
 
     if (use_mmap_buffer) {
         for (auto & mapping : ml.mappings) {
@@ -17073,7 +17157,6 @@ static void llama_graph_compute(
 static int llama_decode_internal(
          llama_context & lctx,
            llama_batch   batch_all) { // TODO: rename back to batch
-
     lctx.is_encoding = false;
     const uint32_t n_tokens_all = batch_all.n_tokens;
 
@@ -17388,6 +17471,7 @@ static int llama_encode_internal(
          llama_context & lctx,
            llama_batch   batch) {
 
+    // printf("llama_encode_internal\n");
     lctx.is_encoding = true;
 
     const uint32_t n_tokens = batch.n_tokens;

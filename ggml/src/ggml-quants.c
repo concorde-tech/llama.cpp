@@ -2553,22 +2553,28 @@ void quantize_row_q4_K_ref(const float * restrict x, block_q4_K * restrict y, in
 }
 
 void dequantize_row_q4_K(const block_q4_K * restrict x, float * restrict y, int64_t k) {
+    // printf("dequantize_row_q4_K\n");
     assert(k % QK_K == 0);
     const int nb = k / QK_K;
+    // printf("int nb = %d\n", nb);
 
     for (int i = 0; i < nb; i++) {
         const uint8_t * q = x[i].qs;
 
         const float d   = GGML_FP16_TO_FP32(x[i].d);
+        // printf("float d = %f\n", d);
         const float min = GGML_FP16_TO_FP32(x[i].dmin);
+        // printf("float min = %f\n", min);
 
         int is = 0;
         uint8_t sc, m;
         for (int j = 0; j < QK_K; j += 64) {
             get_scale_min_k4(is + 0, x[i].scales, &sc, &m);
             const float d1 = d * sc; const float m1 = min * m;
+            // printf("float d1 = %f, float m1 = %f\n", d1, m1);
             get_scale_min_k4(is + 1, x[i].scales, &sc, &m);
             const float d2 = d * sc; const float m2 = min * m;
+            // printf("float d2 = %f, float m2 = %f\n", d2, m2);
             for (int l = 0; l < 32; ++l) *y++ = d1 * (q[l] & 0xF) - m1;
             for (int l = 0; l < 32; ++l) *y++ = d2 * (q[l]  >> 4) - m2;
             q += 32; is += 2;

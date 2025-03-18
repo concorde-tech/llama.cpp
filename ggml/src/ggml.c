@@ -13353,13 +13353,54 @@ static void ggml_compute_forward_transpose(
 
 // ggml_compute_forward_get_rows
 
+void print_tensor_data_binary(const struct ggml_tensor* tensor, size_t max_bytes) {
+    if (tensor == NULL || tensor->data == NULL) {
+        printf("Tensor or tensor data is NULL\n");
+        return;
+    }
+
+    printf("Tensor: %s (type: %s)\n", tensor->name, ggml_type_name(tensor->type));
+    
+    /* Determine how many bytes to print */
+    size_t tensor_size = ggml_nbytes(tensor);
+    size_t bytes_to_print = tensor_size < max_bytes ? tensor_size : max_bytes;
+    
+    printf("Printing first %zu bytes of %zu total bytes:\n", bytes_to_print, tensor_size);
+    
+    /* Get pointer to the data */
+    const uint8_t* data = (const uint8_t*)tensor->data;
+    
+    /* Print byte by byte */
+    size_t i;
+    for (i = 0; i < bytes_to_print; i++) {
+        /* Print byte index at the start of each line */
+        if (i % 8 == 0) {
+            printf("\n%04zx: ", i);
+        }
+        
+        /* Print the byte in binary */
+        uint8_t byte = data[i];
+        int bit;
+        for (bit = 7; bit >= 0; bit--) {
+            printf("%d", (byte >> bit) & 1);
+        }
+        printf(" "); /* Space between bytes */
+    }
+    printf("\n");
+    
+    
+}
+
 static void ggml_compute_forward_get_rows_q(
         const struct ggml_compute_params * params,
               struct ggml_tensor * dst) {
 
     const struct ggml_tensor * src0 = dst->src[0];
     const struct ggml_tensor * src1 = dst->src[1];
-
+    // printf("src0\n");
+    // print_tensor_data_binary(src0, 256);
+    // printf("src1\n");
+    // print_tensor_data_binary(src1, 256);
     GGML_TENSOR_BINARY_OP_LOCALS
 
     const int64_t nc = ne00;
@@ -13385,16 +13426,42 @@ static void ggml_compute_forward_get_rows_q(
 
     for (int64_t i = ir0; i < ir1; ++i) {
         const int64_t i12 = i/(ne11*ne10);
+        // printf("const int64_t i12 = i/(ne11*ne10); \n");
+        // printf("i12 %d\n", i12);
+        // printf("ne11 %d\n", ne11);
+        // printf("ne10 %d\n",ne10);
         const int64_t i11 = (i - i12*ne11*ne10)/ne10;
+        // printf("const int64_t i11 = (i - i12*ne11*ne10)/ne10; \n");
+        // printf("i11 %d\n", i11);
+        // printf("i %d\n", i);
+        // printf("i12 %d\n", i12);
+        // printf("ne11 %d\n", ne11);
+        // printf("ne10 %d\n",ne10);
+        // printf("i12*ne11*ne10 %d\n", i12*ne11*ne10);
+        // printf("(i - i12*ne11*ne10) %d\n", (i - i12*ne11*ne10));
         const int64_t i10 = (i - i12*ne11*ne10 - i11*ne10);
+        // printf("const int64_t i10 = (i - i12*ne11*ne10 - i11*ne10); \n");
+        // printf("i10 %d\n", i10);
+        // printf("i %d\n", i);
+        // printf("i12 %d\n", i12);
+        // printf("ne11 %d\n", ne11);
+        // printf("i11 %d\n", i11);
+        // printf("ne10 %d\n",ne10);
+        // printf("i11*ne10 %d\n", i11*ne10);
+        // printf("i11*ne10 %d\n", i11*ne10);
+        // printf("i12*ne11*ne10 %d\n", i12*ne11*ne10);
+        // printf("(i - i12*ne11*ne10 - i11*ne10) %d\n", (i - i12*ne11*ne10 - i11*ne10));
         const int64_t i01 = *(int32_t *) ((char *) src1->data + i10*nb10 + i11*nb11 + i12*nb12);
-
+        // printf("const int64_t i01 = *(int32_t *) ((char *) src1->data + i10*nb10 + i11*nb11 + i12*nb12); \n");
+        // printf("i01 %d\n", i01);
         GGML_ASSERT(i01 >= 0 && i01 < ne01);
 
         dequantize_row_q(
                 (const void *) ((char *) src0->data + i01*nb01 + i11*nb02 + i12*nb03),
                      (float *) ((char *)  dst->data + i10*nb1  + i11*nb2  + i12*nb3), nc);
     }
+    // printf("dst\n");
+    // print_tensor_data_binary(dst, 256);
 }
 
 static void ggml_compute_forward_get_rows_f16(

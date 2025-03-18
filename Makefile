@@ -248,19 +248,37 @@ test: $(TEST_TARGETS)
 all: $(BUILD_TARGETS) $(TEST_TARGETS) $(LEGACY_TARGETS_BUILD)
 
 ifdef RISCV_CROSS_COMPILE
+ifdef RISCV_MUSL
+CC	:= riscv64-unknown-linux-musl-gcc
+CXX	:= riscv64-unknown-linux-musl-g++
+endif
+ifdef RISCV_GNU
 CC	:= riscv64-unknown-linux-gnu-gcc
 CXX	:= riscv64-unknown-linux-gnu-g++
 endif
+endif
+
 
 #
 # Compile flags
 #
 
 # keep standard at C11 and C++11
-MK_CPPFLAGS  = -Iggml/include -Iggml/src -Iinclude -Isrc -Icommon
-MK_CFLAGS    = -std=c11   -fPIC
-MK_CXXFLAGS  = -std=c++11 -fPIC
+MK_CPPFLAGS  =  -Iggml/include -Iggml/src -Iinclude -Isrc -Icommon
+MK_CFLAGS    =  -std=c11
+MK_CXXFLAGS  =  -std=c++11
 MK_NVCCFLAGS = -std=c++11
+# MK_CPPFLAGS  = -Iggml/include -Iggml/src -Iinclude -Isrc -Icommon
+# MK_CFLAGS    = -std=c11
+# MK_CXXFLAGS  = -std=c++11
+# MK_NVCCFLAGS = -std=c++11
+
+
+ifdef RISCV_CROSS_COMPILE
+MK_CFLAGS    += -static -static-libgcc -mcmodel=medany
+MK_CXXFLAGS  += -static -static-libstdc++ -static-libgcc -mcmodel=medany
+endif
+
 
 ifdef LLAMA_NO_CCACHE
 GGML_NO_CCACHE := 1
@@ -371,7 +389,6 @@ WARN_FLAGS = \
 	-Wpedantic \
 	-Wcast-qual \
 	-Wno-unused-function
-
 MK_CFLAGS += \
 	$(WARN_FLAGS) \
 	-Wshadow \
@@ -398,10 +415,15 @@ endif
 
 # OS specific
 # TODO: support Windows
-ifneq '' '$(filter $(UNAME_S),Linux Darwin FreeBSD NetBSD OpenBSD Haiku)'
-	MK_CFLAGS   += -pthread
-	MK_CXXFLAGS += -pthread
-endif
+# ifneq '' '$(filter $(UNAME_S),Linux Darwin FreeBSD NetBSD OpenBSD Haiku)'
+# 	ifdef RISCV_CROSS_COMPILE
+# 		MK_CFLAGS += -lpthread
+# 		MK_CXXFLAGS += -lpthread
+# 	else
+# 		MK_CFLAGS   += -pthread
+# 		MK_CXXFLAGS += -pthread
+# 	endif
+# endif
 
 # detect Windows
 ifneq ($(findstring _NT,$(UNAME_S)),)
@@ -520,8 +542,27 @@ ifneq ($(filter riscv64%,$(UNAME_M)),)
 endif
 
 else # RISC-V CROSS COMPILATION
-	MK_CFLAGS   += -march=rv64gcv -mabi=lp64d
-	MK_CXXFLAGS += -march=rv64gcv -mabi=lp64d
+	MK_CFLAGS   += -march=rv64gc -mabi=lp64d
+	MK_CXXFLAGS += -march=rv64gc -mabi=lp64d
+endif
+
+ifdef SNAP_VM
+	MK_CFLAGS  +=  -mcmodel=medany -static
+	MK_CXXFLAGS  +=  -mcmodel=medany -static
+	MK_CFLAGS += -L/opt/riscv/riscv64-unknown-elf/lib
+	# MK_CFLAGS  +=  -L/home/kanstantsinnerushkin/dev/vnn/empty
+	MK_CFLAGS  +=  -I/home/kanstantsinnerushkin/dev/vnn/empty/include
+	# MK_CFLAGS  +=  -I/home/kanstantsinnerushkin/tools/riscv/riscv-gnu-toolchain-64-linux/glibc/include
+	# MK_CFLAGS += -I/home/kanstantsinnerushkin/tools/riscv/riscv-gnu-toolchain-64-linux/glibc
+	# MK_CFLAGS += -I/home/kanstantsinnerushkin/tools/riscv/riscv-gnu-toolchain-64-linux/glibc/sysdeps/unix/sysv/linux
+	MK_CXXFLAGS  +=  -L/home/kanstantsinnerushkin/dev/vnn/empty
+	MK_CXXFLAGS  +=  -I/home/kanstantsinnerushkin/dev/vnn/empty/c++11/include
+	MK_CXXFLAGS  +=  -I/home/kanstantsinnerushkin/dev/vnn/empty/include
+	# MK_CXXFLAGS += -I/home/kanstantsinnerushkin/tools/riscv/riscv-gnu-toolchain-64-linux/gcc/libstdc++-v3/include
+	MK_CXXFLAGS += -I/opt/riscv/riscv64-unknown-linux-gnu/include
+	# MK_CXXFLAGS += -L/opt/riscv/riscv64-unknown-linux-gnu/lib  -L/opt/riscv/riscv64-unknown-elf/lib #-Wl,-rpath,/opt/riscv/riscv64-unknown-elf/lib
+	MK_CXXFLAGS += -D_GLIBCXX_HAS_GTHREADS -D_GTHREAD_USE_MUTEX_TIMEDLOCK
+	# MK_CXXFLAGS += -L/home/kanstantsinnerushkin/tools/riscv/riscv-gnu-toolchain-64-linux/build-glibc-linux-rv64imafdc-lp64d
 endif
 
 ifndef GGML_NO_ACCELERATE
@@ -1096,7 +1137,7 @@ endif # GGML_RPC
 
 $(LIB_GGML): \
 	$(OBJ_GGML)
-	$(CXX) $(CXXFLAGS) -shared -fPIC -o $@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -static -o $@ $^ $(LDFLAGS)
 
 $(LIB_GGML_S): \
 	$(OBJ_GGML)
@@ -1155,7 +1196,7 @@ src/llama-sampling.o: \
 $(LIB_LLAMA): \
 	$(OBJ_LLAMA) \
 	$(LIB_GGML)
-	$(CXX) $(CXXFLAGS) -shared -fPIC -o $@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -static  -o $@ $^ $(LDFLAGS)
 
 $(LIB_LLAMA_S): \
 	$(OBJ_LLAMA)
@@ -1213,7 +1254,7 @@ $(LIB_COMMON): \
 	$(OBJ_COMMON) \
 	$(LIB_LLAMA) \
 	$(LIB_GGML)
-	$(CXX) $(CXXFLAGS) -shared -fPIC -o $@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -static -o $@ $^ $(LDFLAGS)
 
 $(LIB_COMMON_S): \
 	$(OBJ_COMMON)
@@ -1262,6 +1303,98 @@ llama-cli: examples/main/main.cpp \
 	@echo
 	@echo '====  Run ./llama-cli -h for help.  ===='
 	@echo
+
+debug: examples/debug/struct_offset.c \
+	# $(OBJ_ALL)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) -o $@ $(LDFLAGS)
+	@echo
+	@echo '====  Run ./llama-cli -h for help.  ===='
+	@echo
+
+
+ggml-snap-vm: ggml/src/ggml-iso-riscv.cpp \
+	$(OBJ_ALL) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) -v $(CXXFLAGS) \
+		$(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) \
+		$(LDFLAGS) -static-libstdc++ \
+		-o $@
+
+common-snap-vm: common/common-load-model.cpp \
+	$(OBJ_ALL) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) -v $(CXXFLAGS) \
+		$(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) \
+		$(LDFLAGS) -static-libstdc++ \
+		-o $@
+
+
+ggml-snap-vm-linked: ggml/src/ggml-iso-riscv.cpp \
+	$(OBJ_GGML) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) -v $(CXXFLAGS) \
+		-mcmodel=medany \
+		-nostartfiles -Wl,-T,./link/riscv64.ld \
+		./link/crt0.s /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crti.o /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtbegin.o  $(filter-out %.h $<,$^) /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtend.o /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtn.o $(call GET_OBJ_FILE, $<) \
+
+		$(LDFLAGS) -static -static-libstdc++ \
+		-o $@
+
+common-snap-vm: common/common-load-model.cpp \
+	$(OBJ_ALL) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) -v $(CXXFLAGS) \
+		$(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) \
+		$(LDFLAGS) -static-libstdc++ \
+		-o $@
+
+common-snap-vm-linked: common/common-load-model.cpp \
+	$(OBJ_GGML) \
+	$(OBJ_COMMON) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) -v $(CXXFLAGS) \
+		-static -static-libstdc++ \
+		-mcmodel=medany \
+		-nostartfiles -Wl,-T,./link/riscv64.ld \
+		./link/crt0.s /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crti.o /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtbegin.o  $(filter-out %.h $<,$^) /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtend.o /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtn.o $(call GET_OBJ_FILE, $<) \
+		/opt/riscv/riscv64-unknown-linux-gnu/lib/libstdc++.a  /opt/riscv/lib/gcc/riscv64-unknown-linux-gnu/14.2.0/libgcc.a \
+	$(LDFLAGS) \
+		-o $@
+
+llama-snap-vm: examples/snap-vm/main.cpp \
+	$(OBJ_ALL) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) \
+		-mcmodel=medany \
+		-E \
+	   -nostartfiles -Wl,-T,./link/riscv64.ld \
+	./link/crt0.s /opt/riscv/lib/gcc/riscv64-unknown-elf/13.2.0/crti.o /opt/riscv/lib/gcc/riscv64-unknown-elf/13.2.0/crtbegin.o $(filter-out %.h $<,$^) $(call GET_OBJ_FILE, $<) /opt/riscv/lib/gcc/riscv64-unknown-elf/13.2.0/crtend.o /opt/riscv/lib/gcc/riscv64-unknown-elf/13.2.0/crtn.o \
+	-static-libstdc++ /home/kanstantsinnerushkin/dev/vnn/pthread-dummy/pthread.o \
+	-I/home/kanstantsinnerushkin/dev/vnn/pthread-dummy \
+	$(CXXFLAGS)  -o $@ $(LDFLAGS)
+	# @echo
+	# @echo '====  Run ./llama-snap-vm -h for help.  ===='
+	# @echo
+
+llama-snap-vm-linked: examples/snap-vm/main.cpp \
+	$(OBJ_ALL) \
+	$(OBJ_STD_OVR)
+	$(CXX) $(CXXFLAGS) -c $< -o $(call GET_OBJ_FILE, $<)
+	$(CXX) -v $(CXXFLAGS) \
+		-mcmodel=medany \
+		-nostartfiles -Wl,-T,./link/riscv64.ld \
+		./link/crt0.s /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crti.o /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtbegin.o  $(filter-out %.h $<,$^) /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtend.o /opt/riscv/lib/gcc/riscv64-unknown-elf/14.2.0/crtn.o $(call GET_OBJ_FILE, $<) \
+		$(LDFLAGS) -static-libstdc++ \
+		-o $@
+
+
 
 llama-infill: examples/infill/infill.cpp \
 	$(OBJ_ALL)

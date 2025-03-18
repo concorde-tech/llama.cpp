@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <mutex>
 #include <sstream>
+// disable
 #include <thread>
 #include <vector>
 
@@ -145,9 +146,10 @@ struct gpt_log {
     }
 
 private:
-    std::mutex mtx;
-    std::thread thrd;
-    std::condition_variable cv;
+    // disable
+    // std::mutex mtx;
+    // std::thread thrd;
+    // std::condition_variable cv;
 
     FILE * file;
 
@@ -167,12 +169,13 @@ private:
 
 public:
     void add(enum ggml_log_level level, const char * fmt, va_list args) {
-        std::lock_guard<std::mutex> lock(mtx);
+        // disable
+        // std::lock_guard<std::mutex> lock(mtx);
 
-        if (!running) {
+        // if (!running) {
             // discard messages while the worker thread is paused
-            return;
-        }
+            // return;
+        // }
 
         auto & entry = entries[tail];
 
@@ -215,6 +218,12 @@ public:
             entry.timestamp = t_us() - t_start;
         }
         entry.is_end = false;
+        
+           // Process the log entry immediately
+        entry.print();
+        if (file) {
+            entry.print(file);
+        }
 
         tail = (tail + 1) % entries.size();
         if (tail == head) {
@@ -240,64 +249,68 @@ public:
             entries = std::move(new_entries);
         }
 
-        cv.notify_one();
+        // disable
+        // cv.notify_one();
     }
 
     void resume() {
-        std::lock_guard<std::mutex> lock(mtx);
+        // disable
+        // std::lock_guard<std::mutex> lock(mtx);
 
-        if (running) {
-            return;
-        }
+        // if (running) {
+        //     return;
+        // }
 
-        running = true;
-
-        thrd = std::thread([this]() {
-            while (true) {
+        // running = true;
+// disable
+        // thrd = std::thread([this]() {
+            // while (true) {
                 {
-                    std::unique_lock<std::mutex> lock(mtx);
-                    cv.wait(lock, [this]() { return head != tail; });
+                    // std::unique_lock<std::mutex> lock(mtx);
+                    // cv.wait(lock, [this]() { return head != tail; });
 
-                    cur = entries[head];
+                    // cur = entries[head];
 
-                    head = (head + 1) % entries.size();
+                    // head = (head + 1) % entries.size();
                 }
+// disable
+                // if (cur.is_end) {
+                //     break;
+                // }
 
-                if (cur.is_end) {
-                    break;
-                }
+                // cur.print(); // stdout and stderr
 
-                cur.print(); // stdout and stderr
-
-                if (file) {
-                    cur.print(file);
-                }
-            }
-        });
+                // if (file) {
+                //     cur.print(file);
+                // }
+            // }
+            // disable
+        // });
     }
 
     void pause() {
-        {
-            std::lock_guard<std::mutex> lock(mtx);
+        // {
+            // disable
+            // std::lock_guard<std::mutex> lock(mtx);
 
-            if (!running) {
-                return;
-            }
+            // if (!running) {
+            //     return;
+            // }
 
-            running = false;
+            // running = false;
 
             // push an entry to signal the worker thread to stop
-            {
-                auto & entry = entries[tail];
-                entry.is_end = true;
+            // {
+            //     auto & entry = entries[tail];
+            //     entry.is_end = true;
 
-                tail = (tail + 1) % entries.size();
-            }
-
-            cv.notify_one();
-        }
-
-        thrd.join();
+            //     tail = (tail + 1) % entries.size();
+            // }
+            // // disable
+            // cv.notify_one();
+        // }
+        // disable
+        // thrd.join();
     }
 
     void set_file(const char * path) {
@@ -339,13 +352,15 @@ public:
     }
 
     void set_prefix(bool prefix) {
-        std::lock_guard<std::mutex> lock(mtx);
+        // disable
+        // std::lock_guard<std::mutex> lock(mtx);
 
         this->prefix = prefix;
     }
 
     void set_timestamps(bool timestamps) {
-        std::lock_guard<std::mutex> lock(mtx);
+        
+        // std::lock_guard<std::mutex> lock(mtx);
 
         this->timestamps = timestamps;
     }

@@ -116,6 +116,7 @@ void * ggml_backend_buffer_get_base(ggml_backend_buffer_t buffer) {
 }
 
 void ggml_backend_buffer_init_tensor(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor) {
+    // printf("ggml_backend_buffer_init_tensor %s\n", buffer->iface.get_name(buffer));
     // init_tensor is optional
     if (buffer->iface.init_tensor) {
         buffer->iface.init_tensor(buffer, tensor);

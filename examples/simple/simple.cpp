@@ -116,6 +116,7 @@ int main(int argc, char ** argv) {
         // sample the next token
         {
             const llama_token new_token_id = llama_sampler_sample(smpl, ctx, -1);
+            printf("\n[n_cur %d][new_token_id %d]\n", n_cur, new_token_id);
 
             // is it an end of generation?
             if (llama_token_is_eog(model, new_token_id) || n_cur == n_predict) {

@@ -589,7 +589,7 @@ static inline ggml_fp16_t ggml_compute_fp32_to_fp16(float f) {
 #endif // __ARM_FEATURE_SVE
 
 // precomputed f32 table for f16 (256 KB)
-// defined in ggml.c, initialized in ggml_init()
+// defined in ggml.c, initialized in ggml_init():w
 extern float ggml_table_f32_f16[1 << 16];
 
 // On ARM NEON, it's quicker to directly convert x -> x instead of calling into ggml_lookup_fp16_to_fp32,
@@ -597,8 +597,11 @@ extern float ggml_table_f32_f16[1 << 16];
 // This is also true for POWER9.
 #if !defined(GGML_FP16_TO_FP32)
 inline static float ggml_lookup_fp16_to_fp32(ggml_fp16_t f) {
+    // printf("ggml_fp16_t f = %d\n", f);
     uint16_t s;
     memcpy(&s, &f, sizeof(uint16_t));
+    // printf("uint16_t s = %d\n", s);
+    // printf("ggml_table_f32_f16[s] = %f\n", ggml_table_f32_f16[s]);
     return ggml_table_f32_f16[s];
 }
 
